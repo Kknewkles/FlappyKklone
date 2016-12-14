@@ -96,6 +96,13 @@ const float obstacleHorSpeed = 200.0f;
 
 bool collisionFlag = false;
 
+
+float adjustmentX;
+float adjustmentY;
+bool adjusted;
+int adjustment_step;
+float precision = 0.01f;
+
 // ----- -----
 //     DATAS
 // ----- -----
@@ -415,7 +422,7 @@ void Reset()
     redbird = 0.0f;
     collisionFlag = false;
     pause = false;              // ?
-
+    
     playerX = screenWidth / 2.0f;
     playerY = screenHeight / 2.0f;
     WritePlayer(playerY, texCoords);
@@ -429,15 +436,26 @@ void Reset()
     gapLocationRight = sequence[sequencePointer++];
     
     WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);
+    
+    
+    // reset the adjustment vars here
+    adjustmentX = 0;
+    adjustmentY = 0;
+    adjusted = false;
+    adjustment_step = 0;
 }
 
+
 // correction should be here. Basically adjust playerY based on... data.
+// Why this indirection?
 void Collision()
 {
     collisionFlag = true;
     redbird = 1.0f;
 }
 
+
+// TO DO: move these to a math thing
 float HorDist(float x1, float x2)
 {
     return abs(x1 - x2);
@@ -465,6 +483,7 @@ float Min(float f1, float f2)
 }
 
 
+
 int64 GlobalPerfCountFrequency;
 
 LARGE_INTEGER Win32GetWallClock()
@@ -480,6 +499,7 @@ real32 Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
 }
 
 
+// these could be made more general, with some stride trickery... just a "print me a struct"
 void DebugPrintout_TexQuad(TexQuad tq)
 {
     printf("-quad:    [%5.1f, %5.1f] [%5.1f, %5.1f] \n", tq.p0.x, tq.p0.y, tq.p3.x, tq.p3.y);
@@ -510,7 +530,23 @@ void DebugPrintout_SixRect(SixRect fr)
 }
 
 
+bool Collision_CheckObstacle(Rect O, TexQuad P)
+{
+    bool result = false;
+    if(O.left <= P.right && O.right >= P.left && O.bottom <= P.top && O.top >= P.bottom)
+        result = true;
     
+    return result;
+}
+
+bool Collision_CheckCorner(Point O, Point P, float R)
+{
+    bool result = false;
+    if(Dist(O, P) <= R)
+        result = true;
+    
+    return result;
+}
 
 int main()
 {
@@ -645,6 +681,13 @@ int main()
         //    INPUT
         // --- --- ---
         glfwPollEvents();
+
+        // what do we need?
+        adjustmentX = 0;
+        adjustmentY = 0;
+        adjusted = false;
+        adjustment_step = 0;
+        precision = 0.01;
         
         if(pause)
             Sleep(1);            // for how long? For as long as is negligible for a player, but not CPU.
@@ -657,68 +700,25 @@ int main()
             // ---
             //   collision
             // ---
-            // how do you streamline this?
-            if(VP_obstacles.UL.left <= VP_player.right && VP_obstacles.UL.right >= VP_player.left &&
-               VP_obstacles.UL.bottom <= VP_player.top && VP_obstacles.UL.top >= VP_player.bottom)
-            {
-#if 1
+            if(Collision_CheckObstacle(VP_obstacles.UL, VP_player))
                 Collision();
-#elif 0
-                float x = Max(VP_obstacles.UL.left, Min(playerX, VP_obstacles.UL.left));
-                float y = Max(VP_obstacles.UL.bottom, Min(playerY, VP_obstacles.UL.top));
-
-                Point p = {x, y};
-                Point playerCenter = {playerX, playerY};
-                if(Dist(p, playerCenter) < playerRadius)
-                    Collision();
-#endif
-            }
-            if(VP_obstacles.LL.left <= VP_player.right && VP_obstacles.LL.right >= VP_player.left &&
-               VP_obstacles.LL.bottom <= VP_player.top && VP_obstacles.LL.top >= VP_player.bottom)
-            {
-#if 1
+            if(Collision_CheckObstacle(VP_obstacles.LL, VP_player))
                 Collision();
-#elif 0
-                float x = Max(VP_obstacles.LL.left, Min(playerX, VP_obstacles.LL.left));
-                float y = Max(VP_obstacles.LL.bottom, Min(playerY, VP_obstacles.LL.top));
-
-                Point p = {x, y};
-                Point playerCenter = {playerX, playerY};
-                if(Dist(p, playerCenter) < playerRadius)
-                    Collision();
-#endif
-            }
-            if(VP_obstacles.LR.left <= VP_player.right && VP_obstacles.LR.right >= VP_player.left &&
-               VP_obstacles.LR.bottom <= VP_player.top && VP_obstacles.LR.top >= VP_player.bottom)
-            {
-#if 1
+            if(Collision_CheckObstacle(VP_obstacles.LR, VP_player))
                 Collision();
-#elif 0
-                float x = Max(VP_obstacles.LR.left, Min(playerX, VP_obstacles.LR.left));
-                float y = Max(VP_obstacles.LR.bottom, Min(playerY, VP_obstacles.LR.top));
-
-                Point p = {x, y};
-                Point playerCenter = {playerX, playerY};
-                if(Dist(p, playerCenter) < playerRadius)
-                    Collision();
-#endif
-            }
-            if(VP_obstacles.UR.left <= VP_player.right && VP_obstacles.UR.right >= VP_player.left &&
-               VP_obstacles.UR.bottom <= VP_player.top && VP_obstacles.UR.top >= VP_player.bottom)
-            {
-#if 1
+            if(Collision_CheckObstacle(VP_obstacles.UR, VP_player))
                 Collision();
-#elif 0
-                float x = Max(VP_obstacles.UR.left, Min(playerX, VP_obstacles.UR.left));
-                float y = Max(VP_obstacles.UR.bottom, Min(playerY, VP_obstacles.UR.top));
-
-                Point p = {x, y};
-                Point playerCenter = {playerX, playerY};
-                if(Dist(p, playerCenter) < playerRadius)
-                    Collision();
-#endif
-            }
-
+            
+            if(Collision_CheckCorner(VP_obstacles.UR.LLcorner, {playerX, playerY}, playerRadius))
+                Collision();
+            if(Collision_CheckCorner(VP_obstacles.LR.ULcorner, {playerX, playerY}, playerRadius))
+                Collision();
+            if(Collision_CheckCorner(VP_obstacles.UL.LLcorner, {playerX, playerY}, playerRadius))
+                Collision();
+            if(Collision_CheckCorner(VP_obstacles.LL.ULcorner, {playerX, playerY}, playerRadius))
+                Collision();
+            
+            // CEILING-FLOOR CHECK
             // here we need a little bit of pushback
             if(VP_player.top >= VP_obstacles.C.bottom)
             {
@@ -733,9 +733,47 @@ int main()
                 Collision();
             }
             
-            // horizontal collision
-            if(!collisionFlag)
+            // Catch a collision fact and...
+            if(collisionFlag)
             {
+                // backwalk until there's no collision anymore.
+                while(!adjusted)
+                {
+                    adjusted = true;
+                    if(Collision_CheckObstacle(VP_obstacles.UL, VP_player))
+                        adjusted = false;
+                    if(Collision_CheckObstacle(VP_obstacles.LL, VP_player))
+                        adjusted = false;
+                    if(Collision_CheckObstacle(VP_obstacles.LR, VP_player))
+                        adjusted = false;
+                    if(Collision_CheckObstacle(VP_obstacles.UR, VP_player))
+                        adjusted = false;
+                    
+                    if(Collision_CheckCorner(VP_obstacles.UR.LLcorner, {playerX, playerY}, playerRadius))
+                        adjusted = false;
+                    if(Collision_CheckCorner(VP_obstacles.LR.ULcorner, {playerX, playerY}, playerRadius))
+                        adjusted = false;
+                    if(Collision_CheckCorner(VP_obstacles.UL.LLcorner, {playerX, playerY}, playerRadius))
+                        adjusted = false;
+                    if(Collision_CheckCorner(VP_obstacles.LL.ULcorner, {playerX, playerY}, playerRadius))
+                        adjusted = false;
+                    
+                    adjustment_step++;
+                    adjustmentX = adjustment_step * obstacleHorSpeed * deltaTime * precision;
+                    adjustmentY = adjustment_step * playerVerSpeed   * deltaTime * precision;
+                    
+                    playerY += adjustmentY;
+                    obstacleLeftX  += adjustmentX;
+                    obstacleRightX += adjustmentX;
+
+                    WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);
+                    WritePlayer(playerY, texCoords);
+                }
+            }
+            
+            else//if(!collisionFlag)
+            {
+                // OBSTACLE MOTION
                 obstacleLeftX  -= obstacleHorSpeed * deltaTime;
                 obstacleRightX -= obstacleHorSpeed * deltaTime;
                 
@@ -747,6 +785,8 @@ int main()
             }
             
             
+            
+            // OBSTACLE RESET
             // TO DO: cook some up to start the obstacles to the right of the player.
             if(obstacleLeftX <= -(obstacleWidth/2.0f))
             {
@@ -765,22 +805,8 @@ int main()
                     sequencePointer = 0;
             }
             
-#if 0
-            if(!printed)
-            {
-                printf("VP: \n");
-                DebugPrintout_TexQuad(VP_player);
-                printf("NDC: \n");
-                DebugPrintout_TexQuad(NDC_player);
-                printf("\n");
-                printf("VP: \n");
-                DebugPrintout_SixRect(VP_obstacles);
-                printf("NDC: \n");
-                DebugPrintout_SixRect(NDC_obstacles);
-                printed = true;
-            }
-#endif
-
+            
+            
             
             // --- --- ---
             //    RENDERING
