@@ -538,11 +538,41 @@ bool Collision_CheckObstacle(Rect O, TexQuad P)
     
     return result;
 }
+bool Collision_CheckObstaclesALL(SixRect O, TexQuad P)
+{
+    bool result = false;
+    
+    if(Collision_CheckObstacle(O.UL, P))
+        result = true;
+    else if(Collision_CheckObstacle(O.LL, P))
+        result = true;
+    else if(Collision_CheckObstacle(O.LR, P))
+        result = true;
+    else if(Collision_CheckObstacle(O.UR, P))
+        result = true;
+    
+    return result;
+}
 
 bool Collision_CheckCorner(Point O, Point P, float R)
 {
     bool result = false;
-    if(Dist(O, P) <= R)
+    if(Dist(O, P) < R)
+        result = true;
+    
+    return result;
+}
+bool Collision_CheckCornersALL(SixRect O, Point P, float R)
+{
+    bool result = false;
+    
+    if(Collision_CheckCorner(O.UR.LLcorner, P, R))
+        result = true;
+    else if(Collision_CheckCorner(O.LR.ULcorner, P, R))
+        result = true;
+    else if(Collision_CheckCorner(O.UL.LLcorner, P, R))
+        result = true;
+    else if(Collision_CheckCorner(O.LL.ULcorner, P, R))
         result = true;
     
     return result;
@@ -683,6 +713,9 @@ int main()
         glfwPollEvents();
 
         // what do we need?
+        bool collisionFlag_obstacle = false;
+        bool collisionFlag_corner = false;
+        
         adjustmentX = 0;
         adjustmentY = 0;
         adjusted = false;
@@ -700,26 +733,82 @@ int main()
             // ---
             //   collision
             // ---
-            if(Collision_CheckObstacle(VP_obstacles.UL, VP_player))
-                Collision();
-            if(Collision_CheckObstacle(VP_obstacles.LL, VP_player))
-                Collision();
-            if(Collision_CheckObstacle(VP_obstacles.LR, VP_player))
-                Collision();
-            if(Collision_CheckObstacle(VP_obstacles.UR, VP_player))
-                Collision();
             
-            if(Collision_CheckCorner(VP_obstacles.UR.LLcorner, {playerX, playerY}, playerRadius))
+            // Idea: set corner and usual collision checks as different ones and check them differently.
+            //  Should be enough, because I see quadratic collision being corrected as linear.
+            if(Collision_CheckCornersALL(VP_obstacles, {playerX, playerY}, playerRadius))
+            {
+                collisionFlag_corner = true;
+            }
+            else
+            {
+                if(Collision_CheckObstaclesALL(VP_obstacles, VP_player))
+                    collisionFlag_obstacle = true;
+            }
+            
+            // Catch a collision fact and...
+            if(collisionFlag_corner)
+            {
+                while(!adjusted)
+                {
+                    adjusted = true;
+                    if(Collision_CheckCornersALL(VP_obstacles, {playerX, playerY}, playerRadius))
+                        adjusted = false;
+                    
+                    // could pull this out too for readability.
+                    adjustment_step++;
+                    adjustmentX = adjustment_step * obstacleHorSpeed * (deltaTime * precision);
+                    adjustmentY = adjustment_step * playerVerSpeed   * (deltaTime * precision);
+                    
+                    playerY += adjustmentY;
+                    obstacleLeftX  += adjustmentX;
+                    obstacleRightX += adjustmentX;
+                    
+                    WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);
+                    WritePlayer(playerY, texCoords);                    
+                }
                 Collision();
-            if(Collision_CheckCorner(VP_obstacles.LR.ULcorner, {playerX, playerY}, playerRadius))
+            }
+            else if(collisionFlag_obstacle)
+            {
+                while(!adjusted)
+                {
+                    adjusted = true;
+                    if(Collision_CheckObstaclesALL(VP_obstacles, VP_player))
+                        adjusted = false;
+                    
+                    // could pull this out too for readability.
+                    adjustment_step++;
+                    adjustmentX = adjustment_step * obstacleHorSpeed * (deltaTime * precision);
+                    adjustmentY = adjustment_step * playerVerSpeed   * (deltaTime * precision);
+                    
+                    playerY += adjustmentY;
+                    obstacleLeftX  += adjustmentX;
+                    obstacleRightX += adjustmentX;
+                    
+                    WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);
+                    WritePlayer(playerY, texCoords);                    
+                }
                 Collision();
-            if(Collision_CheckCorner(VP_obstacles.UL.LLcorner, {playerX, playerY}, playerRadius))
-                Collision();
-            if(Collision_CheckCorner(VP_obstacles.LL.ULcorner, {playerX, playerY}, playerRadius))
-                Collision();
+            }
+            else//(!collisionFlag_corner && !collisionFlag_obstacles) // not sure if this expression is correct. OR, just else it.
+            {
+                // OBSTACLE MOTION
+                obstacleLeftX  -= obstacleHorSpeed * deltaTime;
+                obstacleRightX -= obstacleHorSpeed * deltaTime;
+                
+                // PLAYER MOTION
+                playerVerSpeed += gravity * deltaTime;
+                playerY -= playerVerSpeed * deltaTime;
+                
+                // ACTUALLY WRITE THE COORDINATE CHANGE.
+                WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);    
+                WritePlayer(playerY, texCoords);
+            }
+            
             
             // CEILING-FLOOR CHECK
-            // here we need a little bit of pushback
+            // add it to the obstacles check... or something.
             if(VP_player.top >= VP_obstacles.C.bottom)
             {
                 playerY -= (VP_player.top - VP_obstacles.C.bottom);
@@ -732,58 +821,6 @@ int main()
                 WritePlayer(playerY, texCoords);
                 Collision();
             }
-            
-            // Catch a collision fact and...
-            if(collisionFlag)
-            {
-                // backwalk until there's no collision anymore.
-                while(!adjusted)
-                {
-                    adjusted = true;
-                    if(Collision_CheckObstacle(VP_obstacles.UL, VP_player))
-                        adjusted = false;
-                    if(Collision_CheckObstacle(VP_obstacles.LL, VP_player))
-                        adjusted = false;
-                    if(Collision_CheckObstacle(VP_obstacles.LR, VP_player))
-                        adjusted = false;
-                    if(Collision_CheckObstacle(VP_obstacles.UR, VP_player))
-                        adjusted = false;
-                    
-                    if(Collision_CheckCorner(VP_obstacles.UR.LLcorner, {playerX, playerY}, playerRadius))
-                        adjusted = false;
-                    if(Collision_CheckCorner(VP_obstacles.LR.ULcorner, {playerX, playerY}, playerRadius))
-                        adjusted = false;
-                    if(Collision_CheckCorner(VP_obstacles.UL.LLcorner, {playerX, playerY}, playerRadius))
-                        adjusted = false;
-                    if(Collision_CheckCorner(VP_obstacles.LL.ULcorner, {playerX, playerY}, playerRadius))
-                        adjusted = false;
-                    
-                    adjustment_step++;
-                    adjustmentX = adjustment_step * obstacleHorSpeed * deltaTime * precision;
-                    adjustmentY = adjustment_step * playerVerSpeed   * deltaTime * precision;
-                    
-                    playerY += adjustmentY;
-                    obstacleLeftX  += adjustmentX;
-                    obstacleRightX += adjustmentX;
-
-                    WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);
-                    WritePlayer(playerY, texCoords);
-                }
-            }
-            
-            else//if(!collisionFlag)
-            {
-                // OBSTACLE MOTION
-                obstacleLeftX  -= obstacleHorSpeed * deltaTime;
-                obstacleRightX -= obstacleHorSpeed * deltaTime;
-                
-                playerVerSpeed += gravity * deltaTime;
-                playerY -= playerVerSpeed * deltaTime;
-                
-                WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);    
-                WritePlayer(playerY, texCoords);
-            }
-            
             
             
             // OBSTACLE RESET
