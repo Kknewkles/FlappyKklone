@@ -529,16 +529,38 @@ void DebugPrintout_SixRect(SixRect fr)
     printf("          [%5.1f, %5.1f] [%5.1f, %5.1f] \n", fr.r4.p1.x, fr.r4.p1.y, fr.r4.p2.x, fr.r4.p2.y);
 }
 
-
-bool Collision_CheckObstacle(Rect O, TexQuad P)
+// So here's the final piece of the puzzle: this is a rectangular check for the bird QUAD.
+//  Need to write a new one for the circle, to check against the center!
+bool Collision_CheckObstacleQUAD(Rect O, TexQuad P)
 {
     bool result = false;
-    if(O.left <= P.right && O.right >= P.left && O.bottom <= P.top && O.top >= P.bottom)
+    if(O.left < P.right && O.right > P.left && O.bottom < P.top && O.top > P.bottom)
         result = true;
     
     return result;
 }
-bool Collision_CheckObstaclesALL(SixRect O, TexQuad P)
+bool Collision_CheckObstacle(Rect O, Point P)
+{
+    bool result = false;
+    /*
+      Demetris: "if any of the corners are within radius distance of the player center, you're done"
+     */
+    if(HorDist(O.left, P.x) < playerRadius)
+        if(O.top > P.y && P.y > O.bottom)
+            if(P.x + playerRadius > O.left)
+                result = true;
+    
+    if(VerDist(O.top, playerY) < playerRadius)
+        if(O.left < P.x && P.x < O.right)
+            result = true;
+    
+    if(VerDist(O.bottom, playerY) < playerRadius)
+        if(O.left < P.x && P.x < O.right)
+            result = true;
+    
+    return result;
+}
+bool Collision_CheckObstaclesALL(SixRect O, Point P)
 {
     bool result = false;
     
@@ -614,7 +636,7 @@ int main()
     
     Shader obstacleShader = Shader("obstacles.vsh", "obstacles.fsh");
     Shader playerShader   = Shader("texture.vsh", "texture.fsh");
-    
+    //Shader playerShader   = Shader("square.vsh", "square.fsh");
 
     
 
@@ -720,7 +742,7 @@ int main()
         adjustmentY = 0;
         adjusted = false;
         adjustment_step = 0;
-        precision = 0.01;
+        precision = 0.0001f;
         
         if(pause)
             Sleep(1);            // for how long? For as long as is negligible for a player, but not CPU.
@@ -736,17 +758,20 @@ int main()
             
             // Idea: set corner and usual collision checks as different ones and check them differently.
             //  Should be enough, because I see quadratic collision being corrected as linear.
+#if 1
             if(Collision_CheckCornersALL(VP_obstacles, {playerX, playerY}, playerRadius))
             {
                 collisionFlag_corner = true;
             }
             else
+                #endif
             {
-                if(Collision_CheckObstaclesALL(VP_obstacles, VP_player))
+                if(Collision_CheckObstaclesALL(VP_obstacles, {playerX, playerY}))
                     collisionFlag_obstacle = true;
             }
             
             // Catch a collision fact and...
+#if 1
             if(collisionFlag_corner)
             {
                 while(!adjusted)
@@ -769,12 +794,14 @@ int main()
                 }
                 Collision();
             }
-            else if(collisionFlag_obstacle)
+            else
+#endif
+                if(collisionFlag_obstacle)
             {
                 while(!adjusted)
                 {
                     adjusted = true;
-                    if(Collision_CheckObstaclesALL(VP_obstacles, VP_player))
+                    if(Collision_CheckObstaclesALL(VP_obstacles, {playerX, playerY}))
                         adjusted = false;
                     
                     // could pull this out too for readability.
