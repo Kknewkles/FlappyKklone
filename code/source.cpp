@@ -25,13 +25,17 @@
 /* TO DO: 14.10.16
    [x] pause functionality
    - [x] teach the pause to sleep the CPU
-   [ ] on collision,
-   - [ ] flash red for X time...
+   [x] on collision,
+   - [x] flash red for X time...
    -- [\] time thing-line something?
-   -- [ ] demetrispanos: state variable on the bird "frames_red = X", frames_red--.
-   - [ ] collision position correction
+   -- [x] demetrispanos: state variable on the bird "frames_red = X", frames_red--.
+   - [x] collision position correction
  */
 
+/*
+  FINAL TO DO: 15.12.16
+  [ ] progress bars
+ */
 
 #include <windows.h>
 
@@ -62,12 +66,17 @@ GLfloat BackgroundColor[4] = { 0.2f, 0.3f, 0.3f, 1.0f };
 //GLfloat color1[4] = { 1.0f, 0.5f, 0.2f, 1.0f };
 //GLfloat color2[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
 
+GLfloat colorgreen[4]  = {0.0f, 1.0f, 0.0f, 1.0f};
+GLfloat coloryellow[4] = {1.0f, 1.0f, 0.0f, 1.0f};
+GLfloat colorred[4]    = {1.0f, 0.0f, 0.0f, 0.0f};
+
 
 const GLuint WIDTH = 480, HEIGHT = 800; // TO DO: this will have to be "get screen size from system".
 const GLfloat screenWidth  = (float)WIDTH;
 const GLfloat screenHeight = (float)HEIGHT;
 GLfloat screenRatio  = screenWidth/screenHeight;
 
+const float vertBorders = screenHeight / 30.0f;
 
 // TO DO: move everything into a global struct. A game state of sorts.
 float playerX;
@@ -103,6 +112,10 @@ bool adjusted;
 int adjustment_step;
 float precision = 0.01f;
 
+int score, highscore;
+const float barheight  = vertBorders / 2.0f;
+const float barcenterX = screenWidth / 2.0f;
+
 // ----- -----
 //     DATAS
 // ----- -----
@@ -113,8 +126,8 @@ GLuint obstacleIndexes[] =
     4, 5, 6,   4, 6, 7,
     8, 9, 10,  8, 10,11,
     12,13,14,  12,14,15,
-    16,17,18,  16,18,19,// floor
-    20,21,22,  20,22,23// ceiling
+    16,17,18,  16,18,19,        // floor
+    20,21,22,  20,22,23         // ceiling
 };
     
 GLuint playerIndexes[] =
@@ -129,14 +142,11 @@ GLfloat texCoords[] =
     0.0f, 1.0f
 };
 
+GLfloat barIndexes[] =
+{
+    0,1,2, 0,2,3
+};
 
-/*
-  access to
-  - all of the coordinates,
-  - coordinates structured as points,
-  - -//- as rectangles,
-  - geometric description.
- */
 typedef struct
 {
     float x, y;
@@ -174,6 +184,7 @@ typedef union
     {
         float left, top, pad, bottom, right;
     };
+    float dump[8];
 } Rect;
 typedef union
 {
@@ -192,6 +203,13 @@ typedef union
 SixRect VP_obstacles;
 SixRect NDC_obstacles;
 
+Rect VP_scorebar;
+Rect NDC_scorebar;
+Rect VP_highscorebar;
+Rect NDC_highscorebar;
+
+int scorebary     = vertBorders / 2.0f;
+int highscorebary = screenHeight - scorebary;
 
 // for coordinates
 float viewportToNDC(float v, float d) // value and dimension
@@ -204,6 +222,13 @@ float NDCvalue(float v, float d)
     return v * 2.0f/d;
 }
 
+
+
+void CopyGLfloat(GLfloat from[4], GLfloat to[4])
+{
+    for(int i = 0; i < 4; i++)
+        to[i] = from[i];
+}
 
 // GOLD.
 void WritePlayer(float y, float tx[])
@@ -249,7 +274,7 @@ void WriteObstacle(float lx, float rx, int gapPositionL, int gapPositionR)
     float offsetTop    = screenHeight / 8.0f * 7.0f;
     float scale     = offsetTop - offsetBottom;
     float gapJump   = scale / 10.0f;
-    float vertBorders = screenHeight / 30.0f;
+
     float floor   = vertBorders;
     float ceiling = screenHeight - vertBorders;
     
@@ -415,13 +440,66 @@ void ConvertRects(SixRect *from, SixRect *to)
 }
 
 
+
+
+void WriteRect(Rect *rect, float l, float r, float t, float b)
+{
+    Point p1, p2, p3, p4;
+    rect->p0 = {l, t};
+    rect->p1 = {l, b};
+    rect->p2 = {r, b};
+    rect->p3 = {r, t};
+}
+
+void WriteScore(Rect *bar, int score, int y) // y is to differentiate between score and highscore bar.
+{
+    float barwidthunit = 0.05f * screenWidth;
+    float barwidth     = score * barwidthunit;
+    
+    float barcenterY = y;
+    float barleft = screenWidth / 4.0f;
+    
+    float left, right, top, bottom;
+    left   = barleft;
+    top    = y + (barheight / 2.0f);
+    bottom = y - (barheight / 2.0f);
+    right  = barwidth;
+    
+    WriteRect(bar, left, right, top, bottom);
+}
+void WriteScoreBar(int score)
+{
+    WriteScore(&VP_scorebar, score, scorebary);
+}
+void WriteHighscoreBar(int highscore)
+{
+    WriteScore(&VP_highscorebar, highscore, highscorebary);
+}
+
+// both bars welded in. Fuck it.
+void ConvertBars()
+{
+    for(int i = 0; i < 4; i++)  // spooky skary magik number.
+    {
+        NDC_scorebar.dump[i]   = viewportToNDC(VP_scorebar.dump[i], screenWidth);
+        NDC_scorebar.dump[i+1] = viewportToNDC(VP_scorebar.dump[i+1], screenHeight);
+    }
+    
+    for(int i = 0; i < 4; i++)  // spooky skary magik number.
+    {
+        NDC_highscorebar.dump[i]   = viewportToNDC(VP_highscorebar.dump[i], screenWidth);
+        NDC_highscorebar.dump[i+1] = viewportToNDC(VP_highscorebar.dump[i+1], screenHeight);
+    }
+}
+
+
 bool pause = false;
 float redbird = 0.0f;
 void Reset()
 {
     redbird = 0.0f;
     collisionFlag = false;
-    pause = false;              // ?
+    pause = false;
     
     playerX = screenWidth / 2.0f;
     playerY = screenHeight / 2.0f;
@@ -443,6 +521,9 @@ void Reset()
     adjustmentY = 0;
     adjusted = false;
     adjustment_step = 0;
+    
+    score = 0;
+    WriteScoreBar(score);
 }
 
 
@@ -542,9 +623,7 @@ bool Collision_CheckObstacleQUAD(Rect O, TexQuad P)
 bool Collision_CheckObstacle(Rect O, Point P)
 {
     bool result = false;
-    /*
-      Demetris: "if any of the corners are within radius distance of the player center, you're done"
-     */
+    
     if(HorDist(O.left, P.x) < playerRadius)
         if(O.top > P.y && P.y > O.bottom)
             if(P.x + playerRadius > O.left)
@@ -587,7 +666,7 @@ bool Collision_CheckCorner(Point O, Point P, float R)
 bool Collision_CheckCornersALL(SixRect O, Point P, float R)
 {
     bool result = false;
-    
+
     if(Collision_CheckCorner(O.UR.LLcorner, P, R))
         result = true;
     else if(Collision_CheckCorner(O.LR.ULcorner, P, R))
@@ -596,9 +675,11 @@ bool Collision_CheckCornersALL(SixRect O, Point P, float R)
         result = true;
     else if(Collision_CheckCorner(O.LL.ULcorner, P, R))
         result = true;
+    // don't forget to add right corners sometime. SOME TIME.
     
     return result;
 }
+
 
 int main()
 {
@@ -637,9 +718,10 @@ int main()
     Shader obstacleShader = Shader("obstacles.vsh", "obstacles.fsh");
     Shader playerShader   = Shader("texture.vsh", "texture.fsh");
     //Shader playerShader   = Shader("square.vsh", "square.fsh");
-
+    Shader scorebarShader     = Shader("scorebar.vsh",     "scorebar.fsh");
+    Shader highscorebarShader = Shader("highscorebar.vsh", "highscorebar.fsh");
     
-
+    
     
     // --- --- ---
     //    GPU WRANGLING
@@ -701,6 +783,41 @@ int main()
     // ---
     
     
+    // --- progress bars ---
+    GLuint VBO_scorebar;
+    glGenBuffers(1, &VBO_scorebar);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_scorebar);
+    
+    GLuint VAO_scorebar;
+    glGenVertexArrays(1, &VAO_scorebar);
+    glBindVertexArray(VAO_scorebar);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid *)0);
+    glEnableVertexAttribArray(0);
+    
+    GLuint EBO_scorebar;
+    glGenBuffers(1, &EBO_scorebar);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_scorebar);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(barIndexes), barIndexes, GL_STATIC_DRAW);
+    
+    
+    GLuint VBO_highscorebar;
+    glGenBuffers(1, &VBO_highscorebar);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_highscorebar);
+    
+    GLuint VAO_highscorebar;
+    glGenVertexArrays(1, &VAO_highscorebar);
+    glBindVertexArray(VAO_highscorebar);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid *)0);
+    glEnableVertexAttribArray(0);
+    
+    GLuint EBO_highscorebar;
+    glGenBuffers(1, &EBO_highscorebar);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_highscorebar);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(barIndexes), barIndexes, GL_STATIC_DRAW);
+    // ---
+    
+    
+    
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
@@ -727,14 +844,16 @@ int main()
     bool printed = false;
     Reset();
     
+    highscore = 0;
+    
     while(!glfwWindowShouldClose(window))
     {
         // --- --- ---
         //    INPUT
         // --- --- ---
         glfwPollEvents();
-
-        // what do we need?
+        
+        
         bool collisionFlag_obstacle = false;
         bool collisionFlag_corner = false;
         
@@ -744,6 +863,7 @@ int main()
         adjustment_step = 0;
         precision = 0.0001f;
         
+        
         if(pause)
             Sleep(1);            // for how long? For as long as is negligible for a player, but not CPU.
         else
@@ -751,6 +871,25 @@ int main()
             // --- --- ---
             //    PROCESSING
             // --- --- ---
+
+            // score bars: 2 of them. Score and high score.
+            bool trackscore = false;
+            if(HorDist(playerX, obstacleLeftX)  < playerRadius)
+                trackscore = true;
+            if(HorDist(playerX, obstacleRightX) < playerRadius)
+                trackscore = true;
+            
+            if(trackscore && VP_obstacles.UL.right < playerX)
+            {
+                score++;
+                trackscore = false;
+            }
+            if(trackscore && VP_obstacles.UR.right < playerX)
+            {
+                score++;
+                trackscore = false;
+            }
+                       
             
             // ---
             //   collision
@@ -758,20 +897,18 @@ int main()
             
             // Idea: set corner and usual collision checks as different ones and check them differently.
             //  Should be enough, because I see quadratic collision being corrected as linear.
-#if 1
+            
             if(Collision_CheckCornersALL(VP_obstacles, {playerX, playerY}, playerRadius))
             {
                 collisionFlag_corner = true;
             }
             else
-                #endif
             {
                 if(Collision_CheckObstaclesALL(VP_obstacles, {playerX, playerY}))
                     collisionFlag_obstacle = true;
             }
             
             // Catch a collision fact and...
-#if 1
             if(collisionFlag_corner)
             {
                 while(!adjusted)
@@ -790,13 +927,11 @@ int main()
                     obstacleRightX += adjustmentX;
                     
                     WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);
-                    WritePlayer(playerY, texCoords);                    
+                    WritePlayer(playerY, texCoords);
                 }
                 Collision();
             }
-            else
-#endif
-                if(collisionFlag_obstacle)
+            else if(collisionFlag_obstacle)
             {
                 while(!adjusted)
                 {
@@ -832,8 +967,7 @@ int main()
                 WriteObstacle(obstacleLeftX, obstacleRightX, gapLocationLeft, gapLocationRight);    
                 WritePlayer(playerY, texCoords);
             }
-            
-            
+                        
             // CEILING-FLOOR CHECK
             // add it to the obstacles check... or something.
             if(VP_player.top >= VP_obstacles.C.bottom)
@@ -877,41 +1011,77 @@ int main()
             // --- --- ---
             ConvertRects(&VP_obstacles, &NDC_obstacles);
             ConvertCircle(&VP_player, &NDC_player);
-            
+            ConvertBars();
             
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-        
-        
+            
+            // --- obstacles ---
             obstacleShader.Use();
-        
+            
             glBindBuffer(GL_ARRAY_BUFFER, VBO1);
             glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_obstacles.dump), NDC_obstacles.dump, GL_STATIC_DRAW);
-        
+            
             glBindVertexArray(VAO1);
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-        
-        
+            
+            // --- player ---
             playerShader.Use();
-        
+            
             glUniform1f(2, redbird);
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
             glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_player.dump), NDC_player.dump, GL_STATIC_DRAW);
-        
+            
             glBindTexture(GL_TEXTURE_2D, playerTexture);
             glBindVertexArray(VAO);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
             
+            // --- progress bars ---
+            scorebarShader.Use();
+            
+            GLfloat scorecolor[4];
+            if(score < 10)
+                CopyGLfloat(colorgreen, scorecolor);
+            else if(10 <= score && score < 20)
+                CopyGLfloat(coloryellow, scorecolor);
+            else if(20 <= score && score < 30)
+                CopyGLfloat(colorred, scorecolor);
+            
+            glUniform4f(1, scorecolor[0], scorecolor[1], scorecolor[2], scorecolor[3]);
+            glBindBuffer(GL_ARRAY_BUFFER, VBO_scorebar);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_scorebar.dump), NDC_scorebar.dump, GL_STATIC_DRAW);
+            
+            glBindVertexArray(VAO_scorebar);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            
+            
+            highscorebarShader.Use();
+            
+            GLfloat highscorecolor[4];
+            if(highscore < 10)
+                CopyGLfloat(colorgreen, highscorecolor);
+            else if(10 <= highscore && highscore < 20)
+                CopyGLfloat(coloryellow, highscorecolor);
+            else if(20 <= highscore && highscore < 30)
+                CopyGLfloat(colorred, highscorecolor);
+                        
+            glUniform4f(1, highscorecolor[0], highscorecolor[1], highscorecolor[2], highscorecolor[3]);
+            glBindBuffer(GL_ARRAY_BUFFER, VBO_highscorebar);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_highscorebar.dump), NDC_highscorebar.dump, GL_STATIC_DRAW);
+            
+            glBindVertexArray(VAO_highscorebar);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            
+            
             
             glfwSwapBuffers(window);
-
             
             // --- --- ---
             //    TIME
             // --- --- ---
             LARGE_INTEGER WorkCounter = Win32GetWallClock();
             real32 WorkSecondsElapsed = Win32GetSecondsElapsed(LastCounter, WorkCounter);
-        
+            
             real32 SecondsElapsedForFrame = WorkSecondsElapsed;
             if(SecondsElapsedForFrame < TargetSecondsPerFrame)
             {
@@ -921,7 +1091,7 @@ int main()
                     if(SleepMS > 0)
                         Sleep(SleepMS);
                 }
-            
+                
                 real32 TestSecondsElapsedForFrame = Win32GetSecondsElapsed(LastCounter, Win32GetWallClock());
                 //Assert(TestSecondsElapsedForFrame < TargetSecondsPerFrame);
                 while(SecondsElapsedForFrame < TargetSecondsPerFrame)
@@ -931,12 +1101,12 @@ int main()
             LARGE_INTEGER EndCounter = Win32GetWallClock();
             real32 MSPerFrame = 1000.0f * Win32GetSecondsElapsed(LastCounter, EndCounter);
             LastCounter = EndCounter;
-        
+            
             uint64 EndCycleCount = __rdtsc();
             uint64 CyclesElapsed = EndCycleCount - LastCycleCount;
-        
+            
             LastCycleCount = EndCycleCount;
-            // Can the time code be taken out?
+            
             
             // --- --- ---
             //    "POST-PROCESSING"
@@ -944,9 +1114,13 @@ int main()
             if(collisionFlag)
             {
                 Sleep(500);
+                if(score > highscore)
+                {
+                    highscore = score;
+                    WriteHighscoreBar(highscore);
+                }
                 Reset();
             }
-            
         }
     }
     glDeleteBuffers(1, &VBO);
