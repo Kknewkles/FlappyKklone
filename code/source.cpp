@@ -112,7 +112,7 @@ bool adjusted;
 int adjustment_step;
 float precision = 0.01f;
 
-int score, highscore;
+int score = 0, highscore = 0;
 const float barheight  = vertBorders / 2.0f;
 const float barcenterX = screenWidth / 2.0f;
 
@@ -142,7 +142,7 @@ GLfloat texCoords[] =
     0.0f, 1.0f
 };
 
-GLfloat barIndexes[] =
+GLuint barIndexes[] =
 {
     0,1,2, 0,2,3
 };
@@ -440,6 +440,29 @@ void ConvertRects(SixRect *from, SixRect *to)
 }
 
 
+// both bars welded in. Fuck it.
+void ConvertBars()
+{
+    NDC_scorebar.dump[0] = viewportToNDC(VP_scorebar.dump[0], screenWidth);
+    NDC_scorebar.dump[1] = viewportToNDC(VP_scorebar.dump[1], screenHeight);
+    NDC_scorebar.dump[2] = viewportToNDC(VP_scorebar.dump[2], screenWidth);
+    NDC_scorebar.dump[3] = viewportToNDC(VP_scorebar.dump[3], screenHeight);
+    NDC_scorebar.dump[4] = viewportToNDC(VP_scorebar.dump[4], screenWidth);
+    NDC_scorebar.dump[5] = viewportToNDC(VP_scorebar.dump[5], screenHeight);
+    NDC_scorebar.dump[6] = viewportToNDC(VP_scorebar.dump[6], screenWidth);
+    NDC_scorebar.dump[7] = viewportToNDC(VP_scorebar.dump[7], screenHeight);
+    
+    NDC_highscorebar.dump[0] = viewportToNDC(VP_highscorebar.dump[0], screenWidth);
+    NDC_highscorebar.dump[1] = viewportToNDC(VP_highscorebar.dump[1], screenHeight);
+    NDC_highscorebar.dump[2] = viewportToNDC(VP_highscorebar.dump[2], screenWidth);
+    NDC_highscorebar.dump[3] = viewportToNDC(VP_highscorebar.dump[3], screenHeight);
+    NDC_highscorebar.dump[4] = viewportToNDC(VP_highscorebar.dump[4], screenWidth);
+    NDC_highscorebar.dump[5] = viewportToNDC(VP_highscorebar.dump[5], screenHeight);
+    NDC_highscorebar.dump[6] = viewportToNDC(VP_highscorebar.dump[6], screenWidth);
+    NDC_highscorebar.dump[7] = viewportToNDC(VP_highscorebar.dump[7], screenHeight);
+}
+
+
 
 
 void WriteRect(Rect *rect, float l, float r, float t, float b)
@@ -454,7 +477,7 @@ void WriteRect(Rect *rect, float l, float r, float t, float b)
 void WriteScore(Rect *bar, int score, int y) // y is to differentiate between score and highscore bar.
 {
     float barwidthunit = 0.05f * screenWidth;
-    float barwidth     = score * barwidthunit;
+    float barwidth     = (score % 10) * barwidthunit;
     
     float barcenterY = y;
     float barleft = screenWidth / 4.0f;
@@ -463,7 +486,7 @@ void WriteScore(Rect *bar, int score, int y) // y is to differentiate between sc
     left   = barleft;
     top    = y + (barheight / 2.0f);
     bottom = y - (barheight / 2.0f);
-    right  = barwidth;
+    right  = left + 5.0f + barwidth;
     
     WriteRect(bar, left, right, top, bottom);
 }
@@ -475,23 +498,6 @@ void WriteHighscoreBar(int highscore)
 {
     WriteScore(&VP_highscorebar, highscore, highscorebary);
 }
-
-// both bars welded in. Fuck it.
-void ConvertBars()
-{
-    for(int i = 0; i < 4; i++)  // spooky skary magik number.
-    {
-        NDC_scorebar.dump[i]   = viewportToNDC(VP_scorebar.dump[i], screenWidth);
-        NDC_scorebar.dump[i+1] = viewportToNDC(VP_scorebar.dump[i+1], screenHeight);
-    }
-    
-    for(int i = 0; i < 4; i++)  // spooky skary magik number.
-    {
-        NDC_highscorebar.dump[i]   = viewportToNDC(VP_highscorebar.dump[i], screenWidth);
-        NDC_highscorebar.dump[i+1] = viewportToNDC(VP_highscorebar.dump[i+1], screenHeight);
-    }
-}
-
 
 bool pause = false;
 float redbird = 0.0f;
@@ -608,6 +614,15 @@ void DebugPrintout_SixRect(SixRect fr)
     
     printf("-floor:   [%5.1f, %5.1f] [%5.1f, %5.1f] \n", fr.r4.p0.x, fr.r4.p0.y, fr.r4.p3.x, fr.r4.p3.y);
     printf("          [%5.1f, %5.1f] [%5.1f, %5.1f] \n", fr.r4.p1.x, fr.r4.p1.y, fr.r4.p2.x, fr.r4.p2.y);
+}
+void DebugPrintout_Scorethings() // now there do I call this... at the start, after first writes, and each score-point
+{
+    printf("score: %d   highscore: %d \n", score, highscore);
+    printf("scorebar:     [t: %7.2f b: %7.2f, l: %7.2f, r: %7.2f] \n", VP_scorebar.top, VP_scorebar.bottom, VP_scorebar.left, VP_scorebar.right);
+    printf("highscorebar: [t: %7.2f b: %7.2f, l: %7.2f, r: %7.2f] \n\n", VP_highscorebar.top, VP_highscorebar.bottom, VP_highscorebar.left, VP_highscorebar.right);
+    printf("NDC: \n");
+    printf("scorebar:     [t: %7.2f b: %7.2f, l: %7.2f, r: %7.2f] \n", NDC_scorebar.top, NDC_scorebar.bottom, NDC_scorebar.left, NDC_scorebar.right);
+    printf("highscorebar: [t: %7.2f b: %7.2f, l: %7.2f, r: %7.2f] \n\n", NDC_highscorebar.top, NDC_highscorebar.bottom, NDC_highscorebar.left, NDC_highscorebar.right);
 }
 
 // So here's the final piece of the puzzle: this is a rectangular check for the bird QUAD.
@@ -842,9 +857,15 @@ int main()
     
     
     bool printed = false;
+    highscore = 0;
+    WriteHighscoreBar(highscore);
     Reset();
     
-    highscore = 0;
+    PRINT("FIRST PRINTOUT");
+    DebugPrintout_Scorethings();
+    
+    
+    bool trackscore = false;
     
     while(!glfwWindowShouldClose(window))
     {
@@ -863,6 +884,7 @@ int main()
         adjustment_step = 0;
         precision = 0.0001f;
         
+
         
         if(pause)
             Sleep(1);            // for how long? For as long as is negligible for a player, but not CPU.
@@ -873,23 +895,29 @@ int main()
             // --- --- ---
 
             // score bars: 2 of them. Score and high score.
-            bool trackscore = false;
+
             if(HorDist(playerX, obstacleLeftX)  < playerRadius)
                 trackscore = true;
             if(HorDist(playerX, obstacleRightX) < playerRadius)
                 trackscore = true;
             
-            if(trackscore && VP_obstacles.UL.right < playerX)
+            if(trackscore && VP_player.left > VP_obstacles.UL.right)
             {
                 score++;
                 trackscore = false;
+                WriteScoreBar(score);
+                PRINT("SCORE UPDATE: ");
+                DebugPrintout_Scorethings();
             }
-            if(trackscore && VP_obstacles.UR.right < playerX)
+            if(trackscore && VP_player.left > VP_obstacles.UR.right)
             {
                 score++;
                 trackscore = false;
+                WriteScoreBar(score);
+                PRINT("SCORE UPDATE: ");
+                DebugPrintout_Scorethings();
             }
-                       
+            
             
             // ---
             //   collision
@@ -1047,7 +1075,8 @@ int main()
             else if(20 <= score && score < 30)
                 CopyGLfloat(colorred, scorecolor);
             
-            glUniform4f(1, scorecolor[0], scorecolor[1], scorecolor[2], scorecolor[3]);
+            GLint scorebarColorLocation = glGetUniformLocation(scorebarShader.Program, "color");
+            glUniform4f(scorebarColorLocation, scorecolor[0], scorecolor[1], scorecolor[2], scorecolor[3]);
             glBindBuffer(GL_ARRAY_BUFFER, VBO_scorebar);
             glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_scorebar.dump), NDC_scorebar.dump, GL_STATIC_DRAW);
             
@@ -1064,8 +1093,9 @@ int main()
                 CopyGLfloat(coloryellow, highscorecolor);
             else if(20 <= highscore && highscore < 30)
                 CopyGLfloat(colorred, highscorecolor);
-                        
-            glUniform4f(1, highscorecolor[0], highscorecolor[1], highscorecolor[2], highscorecolor[3]);
+            
+            GLint highscorebarColorLocation = glGetUniformLocation(highscorebarShader.Program, "color");
+            glUniform4f(highscorebarColorLocation, highscorecolor[0], highscorecolor[1], highscorecolor[2], highscorecolor[3]);
             glBindBuffer(GL_ARRAY_BUFFER, VBO_highscorebar);
             glBufferData(GL_ARRAY_BUFFER, sizeof(NDC_highscorebar.dump), NDC_highscorebar.dump, GL_STATIC_DRAW);
             
@@ -1118,6 +1148,8 @@ int main()
                 {
                     highscore = score;
                     WriteHighscoreBar(highscore);
+                    PRINT("HIGHSCORE: ")
+                    DebugPrintout_Scorethings();
                 }
                 Reset();
             }
